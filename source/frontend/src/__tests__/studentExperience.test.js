@@ -8,6 +8,7 @@ import Records from '../views/student/Records.vue'
 import ToolUse from '../views/student/ToolUse.vue'
 
 const plazaRequest = vi.fn()
+const listFavoritesRequest = vi.fn()
 const streamRequest = vi.fn()
 const toolRequest = vi.fn()
 const usageRequest = vi.fn()
@@ -17,7 +18,7 @@ const sessionMessageRequest = vi.fn()
 
 vi.mock('../api/plaza', () => ({ getPlaza: (...args) => plazaRequest(...args) }))
 vi.mock('../api/recommend', () => ({ getRecommendation: vi.fn() }))
-vi.mock('../api/favorites', () => ({ listFavorites: vi.fn(), addFavorite: vi.fn(), removeFavorite: vi.fn() }))
+vi.mock('../api/favorites', () => ({ listFavorites: (...args) => listFavoritesRequest(...args), addFavorite: vi.fn(), removeFavorite: vi.fn() }))
 vi.mock('../api/chat', () => ({
   streamChat: (...args) => streamRequest(...args),
   listSessions: (...args) => sessionListRequest(...args),
@@ -43,6 +44,7 @@ async function mountAt(component, path) {
 describe('student knowledge journey', () => {
   beforeEach(() => {
     plazaRequest.mockReset()
+    listFavoritesRequest.mockReset()
     streamRequest.mockReset()
     toolRequest.mockReset()
     usageRequest.mockReset()
@@ -53,6 +55,7 @@ describe('student knowledge journey', () => {
     sessionMessageRequest.mockResolvedValue({ data: { messages: [] } })
     statsRequest.mockResolvedValue({ data: { total_interactions: 0, distinct_tools: 0, consecutive_days: 0 } })
     localStorage.clear()
+    vi.stubEnv('VITE_DEMO_MODE', 'false')
   })
 
   it('offers exactly three accessible interest layers with live progress', async () => {
@@ -72,6 +75,19 @@ describe('student knowledge journey', () => {
     await wrapper.get('[aria-label="理科专区"]').trigger('click')
     await wrapper.get('form').trigger('submit')
     expect(plazaRequest).toHaveBeenLastCalledWith({ category: '理科', search: '公式', sort: 'hot' })
+  })
+
+  it('keeps complete hot tool cards local in demo mode without calling favorites API', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true')
+    localStorage.setItem('token', 'demo-token')
+    localStorage.setItem('userRole', 'student')
+    const wrapper = await mountAt(Plaza, '/student/plaza')
+    await flushPromises()
+
+    expect(wrapper.get('.hot-section').text()).toContain('古诗词趣味赏析')
+    expect(wrapper.get('.hot-section').text()).toContain('公式推导助手')
+    expect(wrapper.text()).not.toContain('undefined')
+    expect(listFavoritesRequest).not.toHaveBeenCalled()
   })
 
   it('keeps chat input after a failed request and exposes retry', async () => {

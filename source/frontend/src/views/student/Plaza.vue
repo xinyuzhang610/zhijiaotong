@@ -21,6 +21,7 @@ const router = useRouter()
 const canFavorite = computed(() => localStorage.getItem('userRole') === 'student' && Boolean(localStorage.getItem('token')))
 const isFavorite = id => favoriteIds.value.has(id)
 async function loadFavorites() {
+  if (demoEnabled.value) { favoriteIds.value = new Set(); return }
   if (!canFavorite.value) { favoriteIds.value = new Set(); return }
   try {
     const { data } = await listFavorites({ page: 1, page_size: 100 })
@@ -31,7 +32,10 @@ async function load() {
   loading.value = true; error.value = ''
   try {
     if (demoEnabled.value) {
-      const demo = getDemoData('plaza'); categories.value = demo.categories; hotTools.value = demo.hot_tools
+      const demo = getDemoData('plaza')
+      categories.value = demo.categories
+      const demoToolsById = new Map(demo.tools.map(item => [item.id, item]))
+      hotTools.value = demo.hot_tools.map(item => demoToolsById.get(item.id)).filter(Boolean)
       tools.value = demo.tools.filter(item => (!category.value || item.category === category.value) && (!search.value.trim() || `${item.name} ${item.description}`.includes(search.value.trim())))
       await loadFavorites()
       return
