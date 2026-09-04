@@ -35,6 +35,7 @@ function makeRouter(start = '/login?role=teacher') {
 
 describe('authentication experience', () => {
   beforeEach(() => { loginRequest.mockReset(); registerRequest.mockReset(); localStorage.clear(); setActivePinia(createPinia()) })
+  beforeEach(() => { vi.stubEnv('VITE_DEMO_MODE', 'false') })
 
   it('uses accessible native identity controls and emits role changes', async () => {
     const wrapper = mount(IdentitySwitch, { props:{ modelValue:'teacher' } })
@@ -75,6 +76,22 @@ describe('authentication experience', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/student/guidance')
     expect(localStorage.getItem('token')).toBe('student-token')
+  })
+
+  it('shows demo shortcuts only in demo mode and enters without credentials', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true')
+    const router = await makeRouter('/login?role=teacher')
+    const wrapper = mount(Login, { global: { plugins: [router, createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid^="demo-"]')).toHaveLength(2)
+    await wrapper.get('[data-testid="demo-student"]').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/student/guidance')
+    expect(localStorage.getItem('token')).toBe('demo-token')
+    expect(localStorage.getItem('userRole')).toBe('student')
+    expect(localStorage.getItem('userName')).toBe('演示学生')
   })
 
   it('keeps registration labels visible and reports mismatched passwords', async () => {
