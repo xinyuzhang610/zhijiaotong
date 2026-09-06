@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "mysql+pymysql://zjiaotong_app:change-me@127.0.0.1:3306/zjiaotong"
     BACKUP_DATABASE_URL: str = ""
     
-    # DeepSeek API配置
+    # mock 用于开发/答辩备用；deepseek 模式必须配置有效的 DEEPSEEK_API_KEY。
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com"

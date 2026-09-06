@@ -92,7 +92,7 @@ const routes = [
     path: '/tool/:id',
     name: 'ToolUse',
     component: () => import('../views/student/ToolUse.vue'),
-    meta: { requiresAuth: true, role: 'student', title: '使用工具' }
+    meta: { requiresAuth: true, title: '使用工具' }
   },
   {
     path: '/share/:shareCode',

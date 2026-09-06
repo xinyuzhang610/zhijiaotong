@@ -141,6 +141,23 @@ source/backend/.venv/Scripts/python.exe -m uvicorn main:app --app-dir source/bac
 
 首次运行前，请先在 MySQL 中创建 `zjiaotong` 数据库，并将 `source/backend/.env` 中的数据库连接改为本机账号。生产升级只使用 Alembic；已有旧表的数据库请先备份并核对数据。
 
+#### AI Provider 配置
+
+开发和答辩备用模式默认使用 Mock，不需要外部凭据：
+
+```dotenv
+AI_PROVIDER=mock
+```
+
+需要调用真实 DeepSeek 时，在 `source/backend/.env` 中同时设置：
+
+```dotenv
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=<真实 Key>
+```
+
+当选择 `deepseek` 但没有有效 Key 时，后端会明确返回配置错误，不会静默退回 Mock。真实 Key 只放在本地 `.env` 或受控的部署环境中，不要提交到 Git。
+
 ### 2. 启动前端
 
 另开一个终端：
