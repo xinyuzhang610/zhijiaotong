@@ -27,7 +27,9 @@ def _ids(db, user, tool_id):
 
 def _dashboard(db, user, days, tool_id):
     since = _date_range(days); ids = _ids(db, user, tool_id); base = db.query(UsageLog).filter(UsageLog.tool_id.in_(ids or [-1]), UsageLog.status == "completed", UsageLog.created_at >= since)
-    total = base.count(); distinct_students = base.with_entities(UsageLog.user_id).filter(UsageLog.user_id.isnot(None)).distinct().count()
+    preview_base = db.query(UsageLog).filter(UsageLog.tool_id.in_(ids or [-1]), UsageLog.status == "preview", UsageLog.created_at >= since)
+    total = base.count(); preview_total = preview_base.count()
+    distinct_students = base.join(User, User.id == UsageLog.user_id).filter(User.role == "student").with_entities(UsageLog.user_id).distinct().count()
     trend = []
     for offset in range(days - 1, -1, -1):
         start = (datetime.utcnow() - timedelta(days=offset)).date()
@@ -40,7 +42,7 @@ def _dashboard(db, user, days, tool_id):
         .outerjoin(Tool, Tool.id == UsageLog.tool_id)
         .filter(
             UsageLog.tool_id.in_(ids or [-1]),
-            UsageLog.status == "completed",
+            UsageLog.status.in_(('completed', 'preview')),
             UsageLog.created_at >= since,
         )
         .order_by(UsageLog.created_at.desc())
@@ -65,7 +67,7 @@ def _dashboard(db, user, days, tool_id):
         for log, user_name, username, tool_name in recent_rows
     ]
     total_tools = len(ids)
-    return {"days": days, "tool_id": tool_id, "total_tools": total_tools, "total_usage": total, "today_usage": trend[-1]["count"], "distinct_students": distinct_students, "total_users": distinct_students, "weekly_trend": trend, "trend": trend, "top_tools": [{"id": row.id, "name": row.name, "count": row.count, "percentage": round(row.count * 100 / total, 2) if total else 0} for row in ranking], "recent_logs": recent}
+    return {"days": days, "tool_id": tool_id, "total_tools": total_tools, "total_usage": total, "today_usage": trend[-1]["count"], "distinct_students": distinct_students, "active_students": distinct_students, "total_users": distinct_students, "preview_count": preview_total, "weekly_trend": trend, "trend": trend, "top_tools": [{"id": row.id, "name": row.name, "count": row.count, "percentage": round(row.count * 100 / total, 2) if total else 0} for row in ranking], "recent_logs": recent}
 
 @router.get("/my")
 def get_my_usage(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
