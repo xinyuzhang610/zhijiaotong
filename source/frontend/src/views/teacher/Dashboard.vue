@@ -4,7 +4,7 @@
       <div>
         <VintageRibbonTitle label="LEARNING SIGNALS" />
         <h1>数据洞察</h1>
-        <p>从真实使用记录中，看见工具如何进入课堂。</p>
+        <p>从学生正式使用与教师测试记录中，看见工具如何进入课堂。</p>
       </div>
       <div class="dashboard-actions">
         <label>时间范围<select v-model="days" @change="loadDashboard"><option :value="7">近 7 天</option><option :value="30">近 30 天</option></select></label>
@@ -15,18 +15,19 @@
 
     <StatusState v-if="loading" type="loading" title="正在汇聚课堂信号" />
     <StatusState v-else-if="errorMessage" type="error" title="数据暂时不可用" :description="errorMessage" @retry="loadDashboard" />
-    <StatusState v-else-if="!dashboard" type="empty" title="还没有使用数据" description="学生开始使用工具后，趋势与记录会在这里出现。" />
+    <StatusState v-else-if="!dashboard" type="empty" title="还没有使用数据" description="学生正式使用或教师进行预览测试后，趋势与记录会在这里出现。" />
     <template v-else>
       <section class="metrics" aria-label="关键指标">
         <MetricCard label="工具总数" :value="dashboard.total_tools" trend="已接入工具库"/>
-        <MetricCard label="用户总数" :value="dashboard.total_users" tone="gold" trend="教师与学生"/>
-        <MetricCard label="今日使用" :value="dashboard.today_usage" trend="实时累计"/>
+        <MetricCard label="正式使用次数" :value="formalUsage" :trend="`今日正式使用 ${dashboard.today_usage ?? 0} 次`"/>
+        <MetricCard label="活跃学生数" :value="activeStudents" tone="gold" :trend="`近 ${dashboard.days ?? days} 天`"/>
+        <MetricCard label="预览测试" :value="previewCount" tone="gold" trend="教师体验，不计入正式使用"/>
       </section>
 
       <section class="dashboard-grid">
         <article class="panel trend-panel">
-          <h2>七日使用趋势</h2>
-          <div class="bars" role="img" aria-label="七日使用趋势柱状图">
+          <h2>{{ days }}日正式使用趋势</h2>
+          <div class="bars" role="img" :aria-label="`${days}日正式使用趋势柱状图`">
             <div v-for="item in dashboard.weekly_trend" :key="item.date" class="bar-item">
               <span class="bar-value">{{ item.count }}</span>
               <div class="bar"><i :style="{height:barHeight(item.count)}"></i></div>
@@ -36,7 +37,7 @@
         </article>
 
         <article class="panel">
-          <h2>热门工具</h2>
+          <h2>热门工具（正式使用）</h2>
           <ol class="ranking">
             <li v-for="(tool,index) in dashboard.top_tools" :key="tool.name">
               <span>{{ String(index+1).padStart(2,'0') }}</span>
@@ -53,6 +54,7 @@
           <div v-for="log in dashboard.recent_logs" :key="log.id">
             <span>{{ log.user_name || `用户 ${log.user_id || '-'}` }}</span>
             <strong>{{ log.tool_name || `工具 ${log.tool_id || '-'}` }}</strong>
+            <span class="record-status" :class="log.status === 'preview' ? 'is-preview' : 'is-completed'">{{ recordStatus(log.status) }}</span>
             <time>{{ formatTime(log.created_at) }}</time>
           </div>
         </div>
@@ -73,8 +75,12 @@ import { useDemoMode } from '../../composables/useDemoMode'
 const dashboard=ref(null),loading=ref(true),errorMessage=ref(''),days=ref(7)
 const {enabled:demoEnabled,getDemoData}=useDemoMode()
 const maxCount=computed(()=>Math.max(1,...(dashboard.value?.weekly_trend||[]).map(i=>i.count)))
+const formalUsage=computed(()=>dashboard.value?.total_usage ?? (dashboard.value?.weekly_trend||[]).reduce((total,item)=>total+item.count,0))
+const activeStudents=computed(()=>dashboard.value?.active_students ?? dashboard.value?.distinct_students ?? dashboard.value?.total_users ?? 0)
+const previewCount=computed(()=>dashboard.value?.preview_count ?? 0)
 const barHeight=count=>`${Math.max(5,(count/maxCount.value)*100)}%`
 const formatTime=value=>value?new Intl.DateTimeFormat('zh-CN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(value)):'时间未知'
+const recordStatus=status=>status==='preview'?'预览测试':'正式使用'
 async function loadDashboard(){loading.value=true;errorMessage.value='';try{if(demoEnabled.value){dashboard.value=getDemoData('dashboard');return}const {data}=await getDashboard({ days: days.value });dashboard.value=data}catch(e){dashboard.value=null;errorMessage.value=e.response?.data?.detail||'无法连接统计服务，请确认后端已启动。'}finally{loading.value=false}}
 async function downloadDashboard(){try{const {data}=await exportDashboard({days:days.value});const url=URL.createObjectURL(data);const link=document.createElement('a');link.href=url;link.download=`dashboard-${days.value}d.csv`;link.click();URL.revokeObjectURL(url)}catch(e){errorMessage.value=e.response?.data?.detail||'CSV 导出失败，请稍后重试。'}}
 onMounted(loadDashboard)
@@ -142,7 +148,7 @@ onMounted(loadDashboard)
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   position: relative;
   z-index: 1;
@@ -261,7 +267,7 @@ onMounted(loadDashboard)
 
 .record-list > div {
   display: grid;
-  grid-template-columns: 1fr 1.5fr 1fr;
+  grid-template-columns: 1fr 1.5fr auto 1fr;
   gap: 18px;
   padding: 14px 0;
   border-top: 1px solid rgba(196, 180, 154, 0.25);
@@ -270,6 +276,23 @@ onMounted(loadDashboard)
 .record-list span, .record-list time, .empty-copy {
   color: #6b5d3e;
   font-size: 0.85rem;
+}
+
+.record-status {
+  justify-self: start;
+  padding: 3px 8px;
+  border: 1px solid rgba(138, 154, 140, 0.4);
+  border-radius: 999px;
+  color: #6e7d70;
+  background: rgba(138, 154, 140, 0.08);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.record-status.is-preview {
+  border-color: rgba(184, 161, 110, 0.5);
+  color: #8b6f47;
+  background: rgba(184, 161, 110, 0.1);
 }
 
 .record-list strong {
