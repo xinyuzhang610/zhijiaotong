@@ -1,12 +1,18 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import { streamChat, listSessions, getSessionMessages, deleteSession } from '../../api/chat'
 import VintageRibbonTitle from '../../components/vintage/VintageRibbonTitle.vue'
 import VintageOrnament from '../../components/vintage/VintageOrnament.vue'
+import MarkdownText from '../../components/ui/MarkdownText.vue'
 
 const input = ref(''), pending = ref(false), error = ref(''), sessionId = ref(''), feed = ref(null)
 const messages = ref([{ id: 'welcome', role: 'assistant', content: '把你正在卡住的问题写下来。我们会从已知条件出发，一步一步找到突破口。' }])
-const sessions = ref([]), lastFailed = ref('')
+const sessions = ref([]), lastFailed = ref(''), currentController = ref(null), questionInput = ref(null)
+function growInput(event) {
+  const el = event.target
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 150) + 'px'
+}
 const scroll = () => nextTick(() => { if (feed.value) feed.value.scrollTop = feed.value.scrollHeight })
 async function loadSessions() {
   try { const { data } = await listSessions(); sessions.value = data || [] } catch { sessions.value = [] }
@@ -32,31 +38,54 @@ async function removeCurrentSession() {
   try { await deleteSession(sessionId.value); newSession(); await loadSessions() }
   catch (cause) { error.value = cause?.response?.data?.detail || '会话删除失败。' }
 }
+function onEnter(event) {
+  if (event.isComposing || event.shiftKey) return
+  event.preventDefault()
+  submit()
+}
 async function submit(text = input.value) {
   const question = text.trim(); if (!question || pending.value) return
   pending.value = true; error.value = ''; lastFailed.value = question
-  const userMessage = { id: `u-${Date.now()}`, role: 'user', content: question }
-  const assistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: '' }
-  messages.value.push(userMessage, assistantMessage); input.value = ''; scroll()
+  const userMessage = reactive({ id: `u-${Date.now()}`, role: 'user', content: question })
+  const assistantMessage = reactive({ id: `a-${Date.now()}`, role: 'assistant', content: '', reasoning: '' })
+  messages.value.push(userMessage, assistantMessage); input.value = ''; if (questionInput.value) questionInput.value.style.height = 'auto'; scroll()
+  const controller = new AbortController()
+  currentController.value = controller
   let streamFailure = ''
   try {
     await streamChat(
       { message: question, session_id: sessionId.value || undefined },
       {
+        signal: controller.signal,
         onMeta: data => { sessionId.value = data.session_id || sessionId.value; scroll() },
+        onReasoning: data => { assistantMessage.reasoning += data.text || '' },
         onDelta: data => { assistantMessage.content += data.text || ''; scroll() },
         onError: data => { streamFailure = data.message || '流式回答失败。' },
         onDone: async () => { await loadSessions(); scroll() },
       },
     )
     if (streamFailure) throw new Error(streamFailure)
+    if (!assistantMessage.content && !controller.signal.aborted) {
+      messages.value = messages.value.filter(item => item !== assistantMessage)
+      error.value = '回答内容为空（可能网络波动），请重试。'
+      input.value = question
+      return
+    }
     lastFailed.value = ''
   } catch (cause) {
-    error.value = cause?.message || '回答生成超时，问题仍保留在输入框中。'
-    input.value = question
-    if (!assistantMessage.content) messages.value = messages.value.filter(item => item !== assistantMessage)
-  } finally { pending.value = false }
+    if (!controller.signal.aborted) {
+      error.value = cause?.message || '回答生成超时，问题仍保留在输入框中。'
+      input.value = question
+      if (!assistantMessage.content) messages.value = messages.value.filter(item => item !== assistantMessage)
+    } else if (!assistantMessage.content) {
+      messages.value = messages.value.filter(item => item !== assistantMessage)
+    }
+  } finally {
+    pending.value = false
+    if (currentController.value === controller) currentController.value = null
+  }
 }
+function stop() { currentController.value?.abort() }
 onMounted(loadSessions)
 </script>
 
@@ -72,13 +101,14 @@ onMounted(loadSessions)
         <button type="button" :disabled="!sessionId" @click="removeCurrentSession">删除当前</button>
       </div>
       <dl>
-        <div><dt>当前会话</dt><dd>{{ sessionId || '尚未建立' }}</dd></div>
+        <div><dt>当前会话</dt><dd>{{ sessionId ? '#' + sessionId.slice(0, 8) : '尚未建立' }}</dd></div>
         <div><dt>对话原则</dt><dd>先理解，再推导</dd></div>
       </dl>
       <div class="session-list">
         <h2>最近会话</h2>
         <button v-for="session in sessions" :key="session.id" type="button" :class="{ active: session.id === sessionId }" @click="openSession(session.id)">
-          {{ new Date(session.last_activity_at || session.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
+          <span class="session-title">{{ session.preview || '未开始对话' }}</span>
+          <time>{{ new Date(session.last_activity_at || session.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</time>
         </button>
         <p v-if="!sessions.length">完成一次提问后，这里会保留会话入口。</p>
       </div>
@@ -96,11 +126,14 @@ onMounted(loadSessions)
       <div ref="feed" class="message-feed" aria-live="polite">
         <article v-for="message in messages" :key="message.id" :class="message.role">
           <span aria-hidden="true">{{ message.role === 'user' ? '你' : '智' }}</span>
-          <p>{{ message.content }}</p>
-        </article>
-        <article v-if="pending" class="assistant pending">
-          <span aria-hidden="true">智</span>
-          <p>正在连接知识节点<span class="dots">···</span></p>
+          <div class="message-bubble">
+            <details v-if="message.reasoning && message.role === 'assistant'" class="reasoning" :open="pending && message.role === 'assistant'">
+              <summary>思考过程</summary>
+              <div>{{ message.reasoning }}</div>
+            </details>
+            <MarkdownText v-if="message.content" :content="message.content" />
+            <span v-else-if="pending && message.role === 'assistant'" class="typing">正在连接知识节点<span class="dots">···</span></span>
+          </div>
         </article>
       </div>
 
@@ -111,10 +144,11 @@ onMounted(loadSessions)
 
       <form class="composer" @submit.prevent="submit()">
         <label for="student-question">输入你的问题</label>
-        <textarea id="student-question" v-model="input" rows="3" placeholder="例如：为什么勾股定理只适用于直角三角形？" />
+        <textarea id="student-question" ref="questionInput" v-model="input" rows="1" placeholder="例如：为什么勾股定理只适用于直角三角形？" @keydown.enter="onEnter" @input="growInput" />
         <div>
-          <span>{{ input.length }}/1000</span>
-          <button type="submit" :disabled="pending || !input.trim()">{{ pending ? '生成中' : '发送问题' }}</button>
+          <span>{{ input.length }}/1000 · Enter 发送 / Shift+Enter 换行</span>
+          <button v-if="pending" class="stop" type="button" @click="stop">停止</button>
+          <button v-else type="submit" :disabled="!input.trim()">发送问题</button>
         </div>
       </form>
     </section>
@@ -124,7 +158,8 @@ onMounted(loadSessions)
 <style scoped>
 .chat-page.vintage-theme {
   display: grid;
-  min-height: calc(100vh - 80px);
+  height: calc(100vh - 80px);
+  overflow: hidden;
   grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.6fr);
   gap: 24px;
   padding: clamp(22px, 4vw, 52px) clamp(20px, 4vw, 48px);
@@ -152,6 +187,8 @@ onMounted(loadSessions)
 .context-panel {
   position: relative;
   z-index: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: clamp(24px, 3vw, 42px);
   border: 1px solid rgba(196, 180, 154, 0.35);
   border-radius: 2px;
@@ -220,7 +257,7 @@ dd {
   position: relative;
   z-index: 1;
   display: flex;
-  min-height: 650px;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(196, 180, 154, 0.35);
@@ -283,6 +320,7 @@ dd {
   position: relative;
   z-index: 1;
   display: flex;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 18px;
@@ -311,14 +349,13 @@ dd {
   font-family: var(--font-display);
 }
 
-.message-feed article p {
+.message-feed article .message-bubble {
   padding: 13px 16px;
   border: 1px solid rgba(196, 180, 154, 0.3);
   border-radius: 2px 14px 14px 14px;
   background: rgba(250, 248, 242, 0.7);
   color: #4a4333;
   line-height: 1.7;
-  white-space: pre-wrap;
   margin: 0;
 }
 
@@ -327,14 +364,45 @@ dd {
   flex-direction: row-reverse;
 }
 
-.message-feed .user p {
+.message-feed .user .message-bubble {
   border-radius: 14px 2px 14px 14px;
   background: rgba(184, 161, 110, 0.12);
   border-color: rgba(184, 161, 110, 0.35);
 }
 
-.message-feed .pending p {
+.message-bubble .typing {
   opacity: 0.7;
+  color: #6e7d70;
+}
+
+.message-bubble .reasoning {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(138, 154, 140, 0.45);
+  border-radius: 4px;
+  background: rgba(138, 154, 140, 0.06);
+  color: #6e7d70;
+  font-size: 0.85rem;
+}
+
+.message-bubble .reasoning summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  color: #8a9a8c;
+}
+
+.message-bubble .reasoning > div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(138, 154, 140, 0.3);
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.composer .stop {
+  border-color: rgba(201, 107, 90, 0.55);
+  color: #8b4e3e;
 }
 
 .dots {
@@ -399,7 +467,10 @@ dd {
 
 .composer textarea {
   width: 100%;
+  min-height: 44px;
+  max-height: 150px;
   resize: none;
+  overflow-y: auto;
   border: 0;
   background: transparent;
   color: #4a4333;
@@ -448,7 +519,7 @@ dd {
 }
 
 @media (max-width: 820px) {
-  .chat-page { grid-template-columns: 1fr; }
+  .chat-page { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .context-panel { min-height: auto; }
   .chat-panel { min-height: 70vh; }
 }
@@ -473,15 +544,31 @@ dd {
 
 .session-tools button,
 .session-list button {
-  min-height: 34px;
-  padding: 0 10px;
+  display: grid;
+  gap: 3px;
+  min-height: 46px;
+  padding: 7px 10px;
   border: 1px solid rgba(139, 111, 71, 0.28);
   border-radius: 2px;
   background: transparent;
   color: #6b5d3e;
   font: inherit;
   font-size: 0.72rem;
+  text-align: left;
   cursor: pointer;
+}
+
+.session-list .session-title {
+  overflow: hidden;
+  color: #4a4333;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-list time {
+  color: #9a8c6e;
+  font-size: 0.7rem;
 }
 
 .session-tools button:first-child {

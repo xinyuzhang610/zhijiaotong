@@ -72,7 +72,7 @@ const revealUnavailable = ref(false)
 @media (hover: hover) { .hero__skip { transition: transform .3s var(--ease-out), color .3s; } .hero__skip:hover { transform: scale(1.08); color: var(--moon-50); } }
 .hero__lead { max-width: 36rem; margin-top: 2rem; color: rgb(248 250 245 / 80%); font-family: 'Ma Shan Zheng', cursive; font-size: clamp(1.1rem, 1.6vw, 1.35rem); }
 .hero__content :is(a, button, h1, p) { pointer-events: auto; }
-.hero__eyebrow { margin-bottom: 1.5rem; font-family: 'Ma Shan Zheng', cursive; font-size: 1.35rem; letter-spacing: .1em; background: linear-gradient(135deg, var(--gold-200) 0%, var(--gold-400) 40%, var(--gold-600) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 40px rgb(213 166 79 / 30%); }
+.hero__eyebrow { margin-bottom: 1.5rem; font-family: 'Ma Shan Zheng', cursive; font-size: 1.55rem; letter-spacing: .1em; background: linear-gradient(135deg, var(--gold-200) 0%, var(--gold-400) 40%, var(--gold-600) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 40px rgb(213 166 79 / 30%); }
 h1 { max-width: 9.5em; font-family: var(--font-title); font-size: clamp(2.4rem, 5.5vw, 4.8rem); font-weight: 600; letter-spacing: -.04em; line-height: 1.08; text-wrap: balance; }
 @media (hover: hover) { h1 { transition: transform .4s var(--ease-out), text-shadow .4s; cursor: default; } h1:hover { transform: scale(1.05); text-shadow: 0 0 40px rgb(255 255 255 / 15%); } }
 h1 em { color: var(--jade-200); font-style: normal; }

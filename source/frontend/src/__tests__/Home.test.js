@@ -53,7 +53,7 @@ describe('Home.vue', () => {
     expect(wrapper.get('[data-testid="teacher-entry"]').attributes('href')).toBe('/login?role=teacher')
     expect(wrapper.get('[data-testid="student-entry"]').attributes('href')).toBe('/student/guidance')
     expect(wrapper.findAll('.entry-link')).toHaveLength(4)
-    expect(wrapper.findAll('.entry-link__glyph')).toHaveLength(4)
+    expect(wrapper.findAll('.entry-link__glyph')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('→')
     expect(warn.mock.calls.flat().join(' ')).not.toMatch(/router-link|No match found/i)
     warn.mockRestore()

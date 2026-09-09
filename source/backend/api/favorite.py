@@ -11,7 +11,7 @@ from services.tool_access_service import is_plaza_visible, public_tool_payload
 router = APIRouter()
 
 @router.put("/{tool_id}", status_code=status.HTTP_204_NO_CONTENT)
-def add_favorite(tool_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("student"))):
+def add_favorite(tool_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("student", "admin"))):
     tool = db.query(Tool).filter(Tool.id == tool_id).first()
     if not tool or not is_plaza_visible(tool):
         raise HTTPException(status_code=404, detail="工具不存在或不可收藏")
@@ -19,11 +19,11 @@ def add_favorite(tool_id: int, db: Session = Depends(get_db), user: User = Depen
         db.add(Favorite(user_id=user.id, tool_id=tool_id)); db.commit()
 
 @router.delete("/{tool_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_favorite(tool_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("student"))):
+def remove_favorite(tool_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("student", "admin"))):
     db.query(Favorite).filter(Favorite.user_id == user.id, Favorite.tool_id == tool_id).delete(); db.commit()
 
 @router.get("")
-def list_favorites(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), user: User = Depends(require_roles("student"))):
+def list_favorites(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), user: User = Depends(require_roles("student", "admin"))):
     query = db.query(Favorite).filter(Favorite.user_id == user.id).order_by(Favorite.created_at.desc())
     total = query.count(); rows = query.offset((page - 1) * page_size).limit(page_size).all(); items = []
     for favorite in rows:

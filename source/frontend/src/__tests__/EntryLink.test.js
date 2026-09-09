@@ -17,8 +17,7 @@ describe('EntryLink', () => {
     expect(wrapper.text()).toBe('教师入口')
     expect(wrapper.text()).not.toContain('→')
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe('/login?role=teacher')
-    expect(wrapper.get('.entry-link__glyph').element.tagName).toBe('svg')
-    expect(wrapper.get('.entry-link__glyph').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.find('.entry-link__glyph').exists()).toBe(false)
   })
 
   it('renders the student treatment with one inner frame', () => {

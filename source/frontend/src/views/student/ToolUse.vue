@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getSharedTool, getTool } from '../../api/tools'
 import { streamChat } from '../../api/chat'
 import StatusState from '../../components/ui/StatusState.vue'
+import MarkdownText from '../../components/ui/MarkdownText.vue'
 import VintageRibbonTitle from '../../components/vintage/VintageRibbonTitle.vue'
 import VintageOrnament from '../../components/vintage/VintageOrnament.vue'
 import VintagePostmark from '../../components/vintage/VintagePostmark.vue'
@@ -12,16 +13,32 @@ import { useDemoMode } from '../../composables/useDemoMode'
 
 const route = useRoute(), router = useRouter(), tool = ref(null), loadingTool = ref(true), toolError = ref('')
 const { enabled: demoEnabled, getDemoTool } = useDemoMode()
-const input = ref(''), pending = ref(false), error = ref(''), sessionId = ref(''), failedText = ref(''), feed = ref(null), messages = ref([])
+const input = ref(''), pending = ref(false), error = ref(''), sessionId = ref(''), failedText = ref(''), feed = ref(null), messages = ref([]), currentController = ref(null)
+const copied = ref(false), shareError = ref('')
 const isShared = computed(() => Boolean(route.params.shareCode))
 const toolId = computed(() => Number(tool.value?.id))
+const questionInput = ref(null)
+const userTurns = computed(() => messages.value.filter(message => message.role === 'user').length)
+const sessionLabel = computed(() => sessionId.value ? `#${sessionId.value.slice(0, 8)}` : '待建立')
+function growInput(event) {
+  const el = event.target
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 150) + 'px'
+}
 async function loadTool() { loadingTool.value = true; toolError.value = ''; try { const data = demoEnabled.value ? getDemoTool(route.params.id) : isShared.value ? (await getSharedTool(route.params.shareCode)).data : (await getTool(route.params.id)).data; if (!data) throw new Error('工具不存在'); tool.value = data; messages.value = [{ id: 'welcome', role: 'assistant', content: `我是${data.name}。${data.description || '请告诉我你想解决的问题。'}` }] } catch (cause) { toolError.value = cause?.response?.data?.detail || cause.message || '工具详情读取失败。' } finally { loadingTool.value = false } }
+function onEnter(event) {
+  if (event.isComposing || event.shiftKey) return
+  event.preventDefault()
+  submit()
+}
 async function submit(text = input.value) {
   const question = text.trim(); if (!question || pending.value || !tool.value) return
   pending.value = true; error.value = ''; failedText.value = question
-  const userMessage = { id: `u-${Date.now()}`, role: 'user', content: question }
-  const assistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: '' }
-  messages.value.push(userMessage, assistantMessage); input.value = ''; await nextTick(); if (feed.value) feed.value.scrollTop = feed.value.scrollHeight
+  const userMessage = reactive({ id: `u-${Date.now()}`, role: 'user', content: question })
+  const assistantMessage = reactive({ id: `a-${Date.now()}`, role: 'assistant', content: '', reasoning: '' })
+  messages.value.push(userMessage, assistantMessage); input.value = ''; if (questionInput.value) questionInput.value.style.height = 'auto' ; await nextTick(); if (feed.value) feed.value.scrollTop = feed.value.scrollHeight
+  const controller = new AbortController()
+  currentController.value = controller
   let streamFailure = ''
   try {
     await streamChat(
@@ -33,20 +50,60 @@ async function submit(text = input.value) {
         usage_mode: localStorage.getItem('userRole') === 'teacher' ? 'teacher_preview' : 'student_use',
       },
       {
+        signal: controller.signal,
         onMeta: data => { sessionId.value = data.session_id || sessionId.value },
+        onReasoning: data => { assistantMessage.reasoning += data.text || '' },
         onDelta: data => { assistantMessage.content += data.text || ''; if (feed.value) feed.value.scrollTop = feed.value.scrollHeight },
         onError: data => { streamFailure = data.message || '回答生成失败。' },
       },
     )
     if (streamFailure) throw new Error(streamFailure)
+    if (!assistantMessage.content && !controller.signal.aborted) {
+      messages.value = messages.value.filter(item => item !== assistantMessage)
+      error.value = '回答内容为空（可能网络波动），请重试。'
+      input.value = question
+      return
+    }
     failedText.value = ''
   } catch (cause) {
-    error.value = cause?.message || '请求失败，输入内容已为你保留。'
-    input.value = question
-    if (!assistantMessage.content) messages.value = messages.value.filter(item => item !== assistantMessage)
-  } finally { pending.value = false }
+    if (!controller.signal.aborted) {
+      error.value = cause?.message || '请求失败，输入内容已为你保留。'
+      input.value = question
+      if (!assistantMessage.content) messages.value = messages.value.filter(item => item !== assistantMessage)
+    } else if (!assistantMessage.content) {
+      messages.value = messages.value.filter(item => item !== assistantMessage)
+    }
+  } finally {
+    pending.value = false
+    if (currentController.value === controller) currentController.value = null
+  }
 }
-async function share() { try { await navigator.clipboard.writeText(window.location.href) } catch { error.value = '复制失败，请从浏览器地址栏复制链接。' } }
+function stop() { currentController.value?.abort() }
+async function share() {
+  copied.value = false; shareError.value = ''
+  const code = tool.value?.share_code
+  const url = (code && tool.value?.share_enabled) ? `${window.location.origin}/share/${code}` : window.location.href
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = url
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (!ok) throw new Error('copy failed')
+    }
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2500)
+  } catch {
+    shareError.value = '复制失败，请手动复制浏览器地址栏链接。'
+  }
+}
 onMounted(loadTool)
 </script>
 
@@ -80,12 +137,14 @@ onMounted(loadTool)
 
         <dl>
           <div><dt>使用次数</dt><dd>{{ tool.usage_count || 0 }}</dd></div>
-          <div><dt>当前会话</dt><dd>{{ sessionId || '待建立' }}</dd></div>
+          <div><dt>当前会话</dt><dd>{{ sessionLabel }}</dd></div>
+          <div><dt>本轮提问</dt><dd>{{ userTurns }} 次</dd></div>
         </dl>
 
         <button class="share" type="button" @click="share">
-          <span>复制分享链接</span>
+          <span>{{ copied ? '链接已复制' : '复制分享链接' }}</span>
         </button>
+        <p v-if="shareError" class="share-error" role="alert">{{ shareError }}</p>
       </aside>
 
       <!-- 右侧：对话工作区 -->
@@ -104,11 +163,14 @@ onMounted(loadTool)
         <div ref="feed" class="feed" aria-live="polite">
           <article v-for="message in messages" :key="message.id" :class="message.role">
             <b>{{ message.role === 'user' ? '你' : tool.name }}</b>
-            <p>{{ message.content }}</p>
-          </article>
-          <article v-if="pending" class="assistant">
-            <b>{{ tool.name }}</b>
-            <p>正在组织回答…</p>
+            <div class="message-bubble">
+              <details v-if="message.reasoning && message.role === 'assistant'" class="reasoning" :open="pending && message.role === 'assistant'">
+                <summary>思考过程</summary>
+                <div>{{ message.reasoning }}</div>
+              </details>
+              <MarkdownText v-if="message.content" :content="message.content" />
+              <span v-else-if="pending && message.role === 'assistant'" class="typing">正在组织回答…</span>
+            </div>
           </article>
         </div>
 
@@ -119,12 +181,13 @@ onMounted(loadTool)
 
         <form @submit.prevent="submit()">
           <label for="tool-question">向{{ tool.name }}提问</label>
-          <textarea id="tool-question" v-model="input" rows="4" placeholder="写下你希望这个工具协助解决的内容" />
+          <textarea id="tool-question" ref="questionInput" v-model="input" rows="1" placeholder="写下你希望这个工具协助解决的内容" @keydown.enter="onEnter" @input="growInput" />
           <div>
-            <span>回答将使用当前工具的专属能力</span>
-            <button type="submit" :disabled="pending || !input.trim()">{{ pending ? '处理中' : '发送' }}</button>
+            <button v-if="pending" class="stop" type="button" @click="stop">停止</button>
+            <button v-else type="submit" :disabled="!input.trim()">发送</button>
           </div>
         </form>
+        <p class="composer-hint">回答将使用当前工具的专属能力 · Enter 发送 / Shift+Enter 换行</p>
       </section>
     </template>
   </main>
@@ -133,8 +196,9 @@ onMounted(loadTool)
 <style scoped>
 .tool-page.vintage-theme {
   display: grid;
-  min-height: 100vh;
-  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.65fr);
+  height: 100vh;
+  overflow: hidden;
+  grid-template-columns: minmax(210px, 0.5fr) minmax(0, 1.5fr);
   background:
     radial-gradient(circle at 35% 15%, rgba(184, 161, 110, 0.06), transparent 30%),
     #f5f1e8;
@@ -160,7 +224,9 @@ button { font: inherit; cursor: pointer; }
 .tool-context {
   position: relative;
   z-index: 1;
-  padding: clamp(28px, 4vw, 58px);
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(20px, 3vw, 40px);
   border-right: 2px solid rgba(184, 161, 110, 0.3);
   background:
     radial-gradient(circle at 30% 12%, rgba(184, 161, 110, 0.08), transparent 35%),
@@ -211,7 +277,7 @@ button { font: inherit; cursor: pointer; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin: clamp(40px, 8vw, 90px) 0 22px;
+  margin: clamp(12px, 2vw, 24px) 0 18px;
 }
 
 .tool-sigil {
@@ -249,10 +315,11 @@ button { font: inherit; cursor: pointer; }
 
 .tool-context h1 {
   margin: 10px 0 6px;
-  font: 500 clamp(2.1rem, 4vw, 3.4rem)/1.1 var(--font-display);
+  font: 500 clamp(1.9rem, 3.4vw, 2.8rem)/1.15 var(--font-display);
   color: #3d3526;
   position: relative;
   z-index: 1;
+  overflow-wrap: anywhere;
 }
 
 .tool-context > strong {
@@ -308,14 +375,24 @@ dd {
   z-index: 1;
 }
 
+.share-error {
+  margin-top: 10px;
+  color: #8b4e3e;
+  font-size: 0.82rem;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
 /* ========== 右侧：浅纸白底 ========== */
 .workspace {
   position: relative;
   z-index: 1;
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
-  padding: clamp(24px, 4vw, 54px);
+  padding: clamp(22px, 3.5vw, 44px) clamp(24px, 4vw, 54px) 12px;
   background:
     radial-gradient(circle at 80% 90%, rgba(138, 154, 140, 0.04), transparent 40%),
     rgba(250, 248, 242, 0.3);
@@ -373,7 +450,7 @@ dd {
 /* 消息区 */
 .feed {
   display: flex;
-  min-height: 320px;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 22px;
@@ -394,20 +471,19 @@ dd {
   letter-spacing: 0.06em;
 }
 
-.feed article p {
+.feed article .message-bubble {
   padding: 15px 18px;
   border: 1px solid rgba(196, 180, 154, 0.35);
   border-radius: 2px 14px 14px 14px;
   background: rgba(250, 248, 242, 0.8);
   color: #4a4333;
   line-height: 1.75;
-  white-space: pre-wrap;
   margin: 0;
   box-shadow: 0 2px 8px rgba(107, 93, 62, 0.04);
   position: relative;
 }
 
-.feed article p::before {
+.feed article .message-bubble::before {
   content: '';
   position: absolute;
   inset: 3px;
@@ -416,19 +492,54 @@ dd {
   pointer-events: none;
 }
 
+.message-bubble .typing {
+  color: #8b7e60;
+  font-size: 0.9rem;
+}
+
+.message-bubble .reasoning {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(138, 154, 140, 0.45);
+  border-radius: 4px;
+  background: rgba(138, 154, 140, 0.06);
+  color: #6e7d70;
+  font-size: 0.85rem;
+}
+
+.message-bubble .reasoning summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  color: #8a9a8c;
+}
+
+.message-bubble .reasoning > div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(138, 154, 140, 0.3);
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.workspace form .stop {
+  border-color: rgba(201, 107, 90, 0.55);
+  color: #8b4e3e;
+}
+
 .feed .user {
   align-self: flex-end;
 }
 
 .feed .user b { text-align: right; }
 
-.feed .user p {
+.feed .user .message-bubble {
   border-radius: 14px 2px 14px 14px;
   background: rgba(184, 161, 110, 0.1);
   border-color: rgba(184, 161, 110, 0.35);
 }
 
-.feed .user p::before {
+.feed .user .message-bubble::before {
   border-radius: 11px 3px 11px 11px;
 }
 
@@ -489,8 +600,11 @@ dd {
 
 .workspace textarea {
   width: 100%;
+  min-height: 44px;
+  max-height: 150px;
   margin: 10px 0;
   resize: none;
+  overflow-y: auto;
   border: 0;
   background: transparent;
   color: #4a4333;
@@ -508,14 +622,19 @@ dd {
 .workspace form > div {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   position: relative;
   z-index: 1;
 }
 
-.workspace form span {
-  color: #8b7e60;
-  font-size: 0.76rem;
+.composer-hint {
+  margin: 8px 0 0;
+  padding-bottom: 2px;
+  color: #9a8c6e;
+  font-size: 0.78rem;
+  text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .workspace form button {
@@ -542,7 +661,7 @@ dd {
 }
 
 @media (max-width: 820px) {
-  .tool-page { grid-template-columns: 1fr; }
+  .tool-page { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .tool-context { border-right: 0; border-bottom: 2px solid rgba(184, 161, 110, 0.3); }
   .tool-sigil-wrap { margin: 30px 0 18px; }
   .feed { min-height: 380px; }

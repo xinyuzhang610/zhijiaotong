@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 import uuid
@@ -101,7 +102,17 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db), user: User |
 @router.get("/sessions")
 def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     rows = db.query(ConversationSession).filter(ConversationSession.user_id == user.id).order_by(ConversationSession.last_activity_at.desc()).limit(50).all()
-    return [{"id": row.id, "tool_id": row.tool_id, "created_at": row.created_at, "last_activity_at": row.last_activity_at} for row in rows]
+    result = []
+    for row in rows:
+        first_question = db.query(ConversationMessage.content).filter(
+            ConversationMessage.session_id == row.id,
+            ConversationMessage.role == "user",
+        ).order_by(ConversationMessage.created_at.asc()).first()
+        preview = (first_question[0] or "").strip() if first_question else ""
+        if len(preview) > 48:
+            preview = preview[:48] + "…"
+        result.append({"id": row.id, "tool_id": row.tool_id, "created_at": row.created_at, "last_activity_at": row.last_activity_at, "preview": preview})
+    return result
 
 @router.get("/sessions/{session_id}/messages")
 def get_session_messages(session_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -145,12 +156,20 @@ async def stream_chat(payload: ChatRequest, request: Request, db: Session = Depe
             if not stream_session or (user_id is not None and not stream_user):
                 raise AIConfigurationError("会话已失效，请重新发起对话")
             yield f"event: meta\ndata: {json.dumps({'session_id': session_id, 'tool_name': tool_name})}\n\n"
-            async for delta in stream_with_deepseek(payload.message, system_prompt, _history(stream_db, session_id)):
+            async for item in stream_with_deepseek(payload.message, system_prompt, _history(stream_db, session_id)):
                 if await request.is_disconnected():
                     stream_db.add(UsageLog(user_id=user_id, tool_id=tool_id, input_text=payload.message, session_id=session_id, status="aborted")); stream_db.commit(); return
-                reply += delta; yield f"event: delta\ndata: {json.dumps({'text': delta}, ensure_ascii=False)}\n\n"
+                if item["kind"] == "reasoning":
+                    yield f"event: reasoning\ndata: {json.dumps({'text': item['text']}, ensure_ascii=False)}\n\n"
+                    continue
+                reply += item["text"]
+                yield f"event: delta\ndata: {json.dumps({'text': item['text']}, ensure_ascii=False)}\n\n"
             _complete(stream_db, stream_user, stream_session, stream_tool, payload.message, reply, started, usage_mode)
             yield f"event: done\ndata: {json.dumps({'session_id': session_id})}\n\n"
+        except (GeneratorExit, asyncio.CancelledError):
+            # Client aborted mid-stream; record the incomplete attempt.
+            stream_db.add(UsageLog(user_id=user_id, tool_id=tool_id, input_text=payload.message, session_id=session_id, status="aborted")); stream_db.commit()
+            raise
         except (AIConfigurationError, DeepSeekRequestError) as error:
             stream_db.add(UsageLog(user_id=user_id, tool_id=tool_id, input_text=payload.message, session_id=session_id, status="aborted")); stream_db.commit()
             yield f"event: error\ndata: {json.dumps({'message': str(error)}, ensure_ascii=False)}\n\n"
