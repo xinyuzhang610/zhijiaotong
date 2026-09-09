@@ -13,8 +13,8 @@
           <TurnstileWidget v-if="turnstileSiteKey" ref="turnstileRef" :site-key="turnstileSiteKey" action="login" @verify="onCaptchaVerify" @expire="onCaptchaExpire" @error="onCaptchaError" />
           <p v-else class="form-hint">开发环境：验证码已跳过</p>
           <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-          <AppButton class="submit-button" type="submit" :variant="selectedRole === 'teacher' ? 'gold' : 'jade'" :loading="loading">登录{{ selectedRole === 'teacher' ? '教师工作台' : '学生学习空间' }}</AppButton>
-          <p class="auth-footnote">还没有账号？<RouterLink :to="`/register?role=${selectedRole}`">创建{{ selectedRole === 'teacher' ? '教师' : '学生' }}账号</RouterLink></p>
+          <AppButton class="submit-button" type="submit" :variant="selectedRole === 'teacher' ? 'gold' : 'jade'" :loading="loading">登录{{ selectedRole === 'teacher' ? '教师工作台' : selectedRole === 'admin' ? '运营后台' : '学生学习空间' }}</AppButton>
+          <p v-if="selectedRole !== 'admin'" class="auth-footnote">还没有账号？<RouterLink :to="`/register?role=${selectedRole}`">创建{{ selectedRole === 'teacher' ? '教师' : '学生' }}账号</RouterLink></p>
         </form>
 
         <section v-if="isDemoMode" class="demo-entry" aria-labelledby="demo-entry-title">
@@ -61,7 +61,7 @@ import { useDemoMode } from '../composables/useDemoMode'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const selectedRole = ref(route.query.role === 'student' ? 'student' : 'teacher')
+const selectedRole = ref(route.query.role === 'student' ? 'student' : route.query.role === 'admin' ? 'admin' : 'teacher')
 const loading = ref(false)
 const errorMessage = ref('')
 const form = reactive({ username: '', password: '' })
@@ -108,7 +108,7 @@ async function handleLogin() {
     const response = await loginRequest({ username: form.username, password: form.password, expected_role: selectedRole.value, captcha_token: captchaToken.value })
     const payload = response.data
     userStore.login(payload)
-    const fallback = payload.user?.role === 'student' ? '/student/guidance' : '/teacher/home'
+    const fallback = payload.user?.role === 'student' ? '/student/guidance' : payload.user?.role === 'admin' ? '/admin' : '/teacher/home'
     await router.push(route.query.redirect || fallback)
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || '暂时无法登录，请检查网络或稍后重试。'

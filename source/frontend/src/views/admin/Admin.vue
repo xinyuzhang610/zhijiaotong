@@ -98,7 +98,6 @@ onMounted(load)
       >
         <span class="admin-tab__number">0{{ index + 1 }}</span>
         <span class="admin-tab__copy"><small>{{ item.eyebrow }}</small><strong>{{ item.label }}</strong></span>
-        <span class="admin-tab__arrow" aria-hidden="true">↗</span>
       </button>
     </nav>
 
@@ -306,7 +305,7 @@ onMounted(load)
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid rgb(196 180 154 / 50%);
-  border-radius: 2px;
+  border-radius: 20px;
   background: rgb(250 248 242 / 52%);
   color: #6b5d3e;
   font: inherit;
@@ -322,7 +321,6 @@ onMounted(load)
 .admin-tab__copy small { overflow: hidden; color: #8b7e60; font-size: 0.6rem; letter-spacing: 0.1em; text-overflow: ellipsis; white-space: nowrap; }
 .admin-tab__copy strong { color: #4a4333; font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
 .admin-tab.is-active .admin-tab__copy strong { color: #3d4d40; }
-.admin-tab__arrow { align-self: start; color: #8b6f47; font-size: 1rem; }
 
 .admin-panel {
   position: relative;

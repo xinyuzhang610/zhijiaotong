@@ -9,6 +9,8 @@
 html {
   background: var(--color-bg);
   scroll-behavior: smooth;
+  /* 答辩演示：整站字体加大一号（17px），同时保持 rem 布局按比例缩放 */
+  font-size: 17px;
 }
 
 body {
@@ -112,6 +114,38 @@ a:hover {
 .reveal.is-visible {
   opacity: 1;
   transform: none;
+}
+
+/* 复古纸面主题：细米金滚动条，与页面风格一致 */
+.vintage-theme,
+.vintage-theme * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 161, 110, 0.55) rgba(184, 161, 110, 0.08);
+}
+
+.vintage-theme::-webkit-scrollbar,
+.vintage-theme *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.vintage-theme::-webkit-scrollbar-track,
+.vintage-theme *::-webkit-scrollbar-track {
+  background: rgba(184, 161, 110, 0.08);
+}
+
+.vintage-theme::-webkit-scrollbar-thumb,
+.vintage-theme *::-webkit-scrollbar-thumb {
+  background: rgba(184, 161, 110, 0.55);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.vintage-theme::-webkit-scrollbar-thumb:hover,
+.vintage-theme *::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 111, 71, 0.7);
+  background-clip: padding-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

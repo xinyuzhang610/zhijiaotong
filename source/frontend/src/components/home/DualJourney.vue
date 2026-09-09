@@ -51,7 +51,7 @@ li { counter-increment: path; }
 li a { display: inline-flex; min-height: 2.75rem; align-items: center; padding: .45rem .8rem; border: 1px solid rgb(248 250 245 / 32%); border-radius: 999px; color: var(--moon-50); text-decoration: none; }
 @media (hover: hover) { li a { transition: transform .3s var(--ease-out), border-color .3s, background .3s; } li a:hover { transform: scale(1.1); border-color: var(--gold-400); background: rgb(213 166 79 / 12%); } }
 li a::before { content: '0' counter(path); margin-right: .45rem; color: var(--gold-200); font-size: .65rem; }
-.journey__path:hover :deep(.journey-subject__subject) { transform: translateY(-.4rem) scale(1.012); }
+.journey__path:hover :deep(.journey-subject__subject) { transform: translateY(calc(var(--journey-shift, 0px) - .4rem)) scale(1.012); }
 @media (max-width: 900px) { .journey__split { grid-template-columns: 1fr; } .journey__path { min-height: 50vh; } .journey__title { position: absolute; top: 3rem; } }
-@media (prefers-reduced-motion: reduce) { .journey__path:hover :deep(.journey-subject__subject) { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .journey__path:hover :deep(.journey-subject__subject) { transform: translateY(var(--journey-shift, 0px)); } }
 </style>

@@ -178,14 +178,19 @@ watch(() => route.query, () => { category.value = subjectCategory(route.query.su
 }
 
 .search-panel select {
-  width: 100%;
+  flex: 0 0 132px;
+  width: 132px;
   min-height: 48px;
-  padding: 0 16px;
-  border: 0;
-  background: transparent;
+  padding: 0 32px 0 14px;
+  border: 1px solid rgba(196, 180, 154, 0.5);
+  border-radius: 2px;
+  background: rgba(250, 248, 242, 0.7) url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%238b6f47' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center / 10px 10px;
   color: #4a4333;
   font: inherit;
   outline: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .search-panel select option { color: #111; }

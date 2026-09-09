@@ -40,7 +40,7 @@ describe('authentication experience', () => {
   it('uses accessible native identity controls and emits role changes', async () => {
     const wrapper = mount(IdentitySwitch, { props:{ modelValue:'teacher' } })
     const radios = wrapper.findAll('input[type="radio"]')
-    expect(radios).toHaveLength(2)
+    expect(radios).toHaveLength(3)
     expect(radios[0].attributes('checked')).toBeDefined()
     await radios[1].setValue(true)
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['student'])

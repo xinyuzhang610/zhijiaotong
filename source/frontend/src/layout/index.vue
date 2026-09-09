@@ -1,8 +1,8 @@
 <template>
-  <div class="workspace" :class="{ 'is-collapsed': collapsed }">
+  <div class="workspace">
     <button v-if="mobileOpen" class="drawer-backdrop" aria-label="关闭导航" @click="mobileOpen=false"></button>
     <aside class="sidebar" :class="{ 'is-open': mobileOpen }">
-      <RouterLink class="brand-link" to="/"><BrandMark :compact="collapsed" /></RouterLink>
+      <RouterLink class="brand-link" to="/"><BrandMark /></RouterLink>
       <nav :aria-label="role === 'teacher' ? '教师工作台导航' : role === 'admin' ? '管理员后台导航' : '学生学习导航'">
         <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" :aria-current="route.path===item.to?'page':undefined" @click="mobileOpen=false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon"/></svg><span>{{ item.label }}</span>
@@ -12,7 +12,7 @@
     </aside>
     <div class="workspace-body">
       <header class="workspace-header">
-        <div><button class="mobile-menu" aria-label="打开导航菜单" @click="mobileOpen=true"><span></span><span></span></button><button class="collapse-control" :aria-label="collapsed?'展开侧栏':'收起侧栏'" @click="collapsed=!collapsed">{{ collapsed ? '→' : '←' }}</button></div>
+        <div><button class="mobile-menu" aria-label="打开导航菜单" @click="mobileOpen=true"><span></span><span></span></button></div>
         <div class="page-context"><span>{{ role==='teacher'?'TEACHER ORBIT':role==='admin'?'ADMIN CONTROL':'STUDENT ORBIT' }}</span><strong>{{ route.meta.title || '智教通' }}</strong><em v-if="demoEnabled">{{ demoLabel }}</em></div>
         <div class="profile"><span>{{ initials }}</span><div><small>{{ role==='teacher'?'教师':role==='admin'?'管理员':'学生' }}</small><strong>{{ userName }}</strong></div></div>
       </header>
@@ -27,7 +27,7 @@ import { useUserStore } from '../store/user'
 import BrandMark from '../components/brand/BrandMark.vue'
 import { useDemoMode } from '../composables/useDemoMode'
 const route=useRoute(),router=useRouter(),store=useUserStore()
-const collapsed=ref(false),mobileOpen=ref(false)
+const mobileOpen=ref(false)
 const { enabled: demoEnabled, label: demoLabel }=useDemoMode()
 const role=computed(()=>route.path.startsWith('/student')?'student':route.path.startsWith('/admin')?'admin':'teacher')
 const userName=computed(()=>store.userName||localStorage.getItem('userName')||(role.value==='teacher'?'教师用户':role.value==='admin'?'管理员':'探索者'))
@@ -223,7 +223,6 @@ onMounted(()=>document.addEventListener('keydown',onKey));onBeforeUnmount(()=>do
   gap: 8px;
 }
 
-.collapse-control,
 .mobile-menu {
   display: grid;
   place-items: center;
@@ -239,7 +238,6 @@ onMounted(()=>document.addEventListener('keydown',onKey));onBeforeUnmount(()=>do
   transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
 }
 
-.collapse-control:hover,
 .mobile-menu:hover {
   background: rgba(250, 248, 242, 0.95);
   color: #4a4333;
@@ -352,9 +350,6 @@ onMounted(()=>document.addEventListener('keydown',onKey));onBeforeUnmount(()=>do
   }
   .mobile-menu {
     display: grid;
-  }
-  .collapse-control {
-    display: none;
   }
   .drawer-backdrop {
     display: block;

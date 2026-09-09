@@ -76,7 +76,7 @@ def get_my_usage(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 @router.get("/student-stats")
-def student_stats(db: Session = Depends(get_db), user: User = Depends(require_roles("student"))):
+def student_stats(db: Session = Depends(get_db), user: User = Depends(require_roles("student", "admin"))):
     logs = db.query(UsageLog).filter(UsageLog.user_id == user.id, UsageLog.status == "completed").order_by(UsageLog.created_at.desc()).all()
     dates = {row.created_at.date() for row in logs if row.created_at}; today = datetime.utcnow().date(); streak = 0
     while today in dates: streak += 1; today -= timedelta(days=1)

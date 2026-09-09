@@ -17,6 +17,7 @@
         >
         <span class="identity-symbol" aria-hidden="true">
           <svg v-if="option.value === 'teacher'" viewBox="0 0 24 24"><path d="M4 5.5 12 2l8 3.5-8 3.6L4 5.5Zm2.5 3.1V14c0 2.2 2.5 4 5.5 4s5.5-1.8 5.5-4V8.6L12 11 6.5 8.6ZM19 9v7"/></svg>
+          <svg v-else-if="option.value === 'admin'" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8.1-7 10-4-1.9-7-5.4-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
           <svg v-else viewBox="0 0 24 24"><path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM5 21c.4-4.5 2.8-7 7-7s6.6 2.5 7 7M4 8h3m10 0h3"/></svg>
         </span>
         <span><strong>{{ option.title }}</strong><small>{{ option.description }}</small></span>
@@ -35,7 +36,8 @@ defineEmits(['update:modelValue'])
 
 const options = [
   { value: 'teacher', title: '我是教师', description: '发现需求，创造课堂新可能' },
-  { value: 'student', title: '我是学生', description: '探索兴趣，开启知识旅程' }
+  { value: 'student', title: '我是学生', description: '探索兴趣，开启知识旅程' },
+  { value: 'admin', title: '我是管理员', description: '运营管理，守护平台秩序' }
 ]
 </script>
 

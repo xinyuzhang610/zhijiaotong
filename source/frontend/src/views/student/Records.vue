@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { getMyUsage, getStudentStats } from '../../api/usage'
 import StatusState from '../../components/ui/StatusState.vue'
+import MarkdownText from '../../components/ui/MarkdownText.vue'
 import VintageRibbonTitle from '../../components/vintage/VintageRibbonTitle.vue'
 import VintageDivider from '../../components/vintage/VintageDivider.vue'
 import VintageOrnament from '../../components/vintage/VintageOrnament.vue'
@@ -12,6 +13,8 @@ const { enabled: demoEnabled, getDemoData } = useDemoMode()
 const uniqueTools = computed(() => new Set(logs.value.map(item => item.tool_id)).size)
 const activeDays = computed(() => new Set(logs.value.map(item => item.created_at?.slice(0, 10)).filter(Boolean)).size)
 const formatTime = value => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '时间未知'
+// 列表预览只取纯文本前段，细节在弹窗中以 Markdown 渲染。
+const excerpt = value => String(value || '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*#_>`~]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 80)
 async function load() {
   loading.value = true; error.value = ''
   try {
@@ -68,7 +71,7 @@ onMounted(load)
               <button type="button" class="record-button" @click="selected = log">
                 <span>工具 #{{ log.tool_id }}</span>
                 <h3>{{ log.input_text || '未记录输入内容' }}</h3>
-                <p v-if="log.output_text">{{ log.output_text }}</p>
+                <p v-if="log.output_text">{{ excerpt(log.output_text) }}</p>
                 <strong>查看完整问答 →</strong>
               </button>
           </li>
@@ -81,7 +84,7 @@ onMounted(load)
         <span>学习记录详情</span>
         <h2>{{ selected.input_text || '未记录输入内容' }}</h2>
         <p class="modal-meta">{{ formatTime(selected.created_at) }} · 工具 #{{ selected.tool_id }}</p>
-        <div class="modal-copy"><h3>AI 输出</h3><p>{{ selected.output_text || '没有保存输出内容。' }}</p></div>
+        <div class="modal-copy"><h3>AI 输出</h3><MarkdownText v-if="selected.output_text" :content="selected.output_text" /><p v-else>没有保存输出内容。</p></div>
       </section>
     </div>
   </main>

@@ -116,7 +116,7 @@ router.beforeEach((to) => {
   const requiredRole = to.matched.map(record => record.meta.role).find(Boolean)
   if (to.meta.requiresAuth && !token) {
     const query = { redirect: to.fullPath }
-    if (requiredRole === 'teacher' || requiredRole === 'student') query.role = requiredRole
+    if (requiredRole) query.role = requiredRole
     return { path: '/login', query }
   }
   const currentRole = localStorage.getItem('userRole')

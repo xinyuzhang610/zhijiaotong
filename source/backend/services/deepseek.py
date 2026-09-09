@@ -83,11 +83,14 @@ async def chat_with_deepseek(message: str, system_prompt: str = None, history: l
 
 
 async def stream_with_deepseek(message: str, system_prompt: str = None, history: list[dict] | None = None):
-    """Yield provider text deltas without persisting any user data."""
+    """Yield provider text deltas as {'kind': 'content'|'reasoning', 'text': ...} items.
+
+    Reasoning is streamed for display only and is never persisted.
+    """
     if settings.AI_PROVIDER == "mock":
         reply = mock_reply(message, system_prompt)
         for start in range(0, len(reply), 40):
-            yield reply[start:start + 40]
+            yield {"kind": "content", "text": reply[start:start + 40]}
         return
     if not settings.DEEPSEEK_API_KEY or settings.DEEPSEEK_API_KEY == "your_api_key_here":
         raise AIConfigurationError("DeepSeek API Key is not configured")
@@ -95,7 +98,7 @@ async def stream_with_deepseek(message: str, system_prompt: str = None, history:
     messages = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + (history or []) + [{"role": "user", "content": message}]
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
     payload = {"model": settings.DEEPSEEK_MODEL, "messages": messages, "stream": True, "temperature": 0.7, "max_tokens": 2000}
-    async with httpx.AsyncClient(timeout=45.0) as client:
+    async with httpx.AsyncClient(timeout=90.0) as client:
         async with client.stream("POST", f"{settings.DEEPSEEK_API_URL}/v1/chat/completions", headers=headers, json=payload) as response:
             if response.is_error:
                 body = await response.aread(); response._content = body
@@ -104,11 +107,15 @@ async def stream_with_deepseek(message: str, system_prompt: str = None, history:
                 if not line.startswith("data: ") or line == "data: [DONE]":
                     continue
                 try:
-                    delta = json.loads(line[6:])["choices"][0].get("delta", {}).get("content")
+                    delta = json.loads(line[6:])["choices"][0].get("delta", {})
                 except (ValueError, KeyError, IndexError):
-                    delta = None
-                if delta:
-                    yield delta
+                    continue
+                content = delta.get("content")
+                if content:
+                    yield {"kind": "content", "text": content}
+                reasoning = delta.get("reasoning_content")
+                if reasoning:
+                    yield {"kind": "reasoning", "text": reasoning}
 
 
 def mock_reply(message: str, system_prompt: str = None) -> str:
